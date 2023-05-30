@@ -44,29 +44,7 @@ def run():
         aggr_mi += fmap_mi
         aggr_aec += fmap_aec
 
-        plt.figure(figsize=(12, 4))
-        plt.suptitle("Band {} - {}".format(band[0], band[1]))
-
-        plt.subplot(131)
-        sns.heatmap(fmap_iplv, cmap="viridis")
-        plt.title("IPLV")
-        plt.xlabel("ROIs")
-        plt.ylabel("ROIs")
-
-        plt.subplot(132)
-        sns.heatmap(fmap_mi, cmap="viridis")
-        plt.title("MI")
-        plt.xlabel("ROIs")
-        plt.ylabel("ROIs")
-        plt.tight_layout()
-
-        plt.subplot(133)
-        sns.heatmap(fmap_aec, cmap="viridis")
-        plt.title("AEC")
-        plt.xlabel("ROIs")
-        plt.ylabel("ROIs")
-        plt.tight_layout()
-
+    # Single Layer FC
     aggr_iplv /= len(BANDS)
     aggr_mi /= len(BANDS)
     aggr_aec /= len(BANDS)
