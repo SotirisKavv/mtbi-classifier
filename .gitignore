@@ -1,3 +1,8 @@
 data
 .vscode
 models
+
+src/classification/pycache
+src/featextr/pycache
+src/festimators/pycache
+src/utils/pycache

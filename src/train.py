@@ -72,9 +72,9 @@ def run():
     plt.ylabel("ROIs")
     plt.tight_layout()
 
-    mst_iplv = omst(aggr_iplv, 3)
-    mst_mi = omst(aggr_mi, 3)
-    mst_aec = omst(aggr_aec, 3)
+    mst_iplv = omst(aggr_iplv, 15)
+    mst_mi = omst(aggr_mi, 15)
+    mst_aec = omst(aggr_aec, 15)
 
     plt.figure(figsize=(12, 4))
     plt.suptitle("3-MST results")

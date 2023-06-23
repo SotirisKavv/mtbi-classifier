@@ -1,7 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.fft import fft, fftfreq, fftshift
-from scipy.signal import butter, lfilter
+
+## used for plotting
+# from scipy.fft import fft, fftfreq, fftshift
+# from scipy.signal import butter, lfilter
 
 
 def bandpass(x, fs, band, order):
