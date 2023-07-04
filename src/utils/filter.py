@@ -3,7 +3,7 @@ import numpy as np
 
 ## used for plotting
 # from scipy.fft import fft, fftfreq, fftshift
-# from scipy.signal import butter, lfilter
+from scipy.signal import butter, lfilter
 
 
 def bandpass(x, fs, band, order):

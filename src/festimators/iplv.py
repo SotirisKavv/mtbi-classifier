@@ -11,13 +11,15 @@ def imag_phase_lock_value(multi):
                     rois x samples (time points)
     OUTPUT : iplv = rois x rois
     """
-    rois, samples = multi.shape
+    samples, rois = multi.shape
 
     Q = np.exp(1j * np.angle(hilbert(multi)))
     iplv = np.zeros((rois, rois))
 
     for i in range(rois):
         for j in range(rois):
-            iplv[i, j] = np.abs(np.imag(np.sum(Q[i] / Q[j])) / samples)
+            iphase_lock = np.abs(np.imag(np.sum(Q[:, j] / Q[:, i])) / samples)
+            iplv[i, j] = iphase_lock
+            iplv[j, i] = iphase_lock
 
-    return minmax_scale(iplv)
+    return (iplv - np.min(iplv)) / (np.max(iplv) - np.min(iplv))

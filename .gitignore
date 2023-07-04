@@ -2,7 +2,7 @@ data
 .vscode
 models
 
-src/classification/pycache
-src/featextr/pycache
-src/festimators/pycache
-src/utils/pycache
+src/classification/__pycache__
+src/featextr/__pycache__
+src/festimators/__pycache__
+src/utils/__pycache__
