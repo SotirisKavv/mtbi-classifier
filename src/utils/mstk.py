@@ -1,6 +1,8 @@
 import numpy as np
 import networkx as nx
 
+from utils.timer import timer
+
 
 def orthogonal_minimum_spanning_tree(graph, k):
     """

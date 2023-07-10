@@ -1,21 +1,32 @@
 import numpy as np
 from scipy.fftpack import hilbert
-from sklearn.preprocessing import minmax_scale
 
 
-def amplitude_envelope_correlation(timeseries):
+def amplitude_envelope_correlation(timeseries1, timeseries2, chunk_size=1000):
     """
     Calculate the amplitude envelope correlation between X time series
     INPUT: timeseries - a NumPy array of shape (X, t) where X represents the number of time series and t is the number of time points
     OUTPUT: aec - a NumPy array of shape (X, X) containing the amplitude envelope correlation between each pair of time series
     """
-    t, X = timeseries.shape
 
-    im = np.array([hilbert(timeseries[:, i]) for i in range(X)])
-    ampl = np.sqrt(np.transpose(timeseries) ** 2 + im**2)
+    if timeseries1.shape != timeseries2.shape:
+        raise ValueError(
+            "Shape mismatch between timeseries1 and timeseries2: "
+            f"{timeseries1.shape} vs {timeseries2.shape}"
+        )
 
-    corr = np.abs(np.corrcoef(ampl))
+    _, X1 = timeseries1.shape
+    _, X2 = timeseries2.shape
 
-    corr = corr - np.diag(np.diag(corr))
+    im1 = np.apply_along_axis(hilbert, 0, timeseries1)
+    im2 = np.apply_along_axis(hilbert, 0, timeseries2)
 
-    return minmax_scale(corr)
+    ampl1 = np.abs(im1)
+    ampl2 = np.abs(im2)
+
+    corr = np.abs(np.corrcoef(ampl1.T, ampl2.T)[:X1, X1:])
+
+    # Set the diagonal elements to zero before normalization
+    np.fill_diagonal(corr, 0)
+
+    return (corr - np.min(corr)) / (np.max(corr) - np.min(corr))
