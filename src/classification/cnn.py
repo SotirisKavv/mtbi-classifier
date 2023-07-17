@@ -1,72 +1,131 @@
-# classification using Convolutional Neural Network
 import torch
-from torch.nn import functional as F
-from torch_geometric.nn import GCNConv
-from torch_geometric.data import Data, DataLoader
+import torch.nn as nn
+import torch.nn.functional as F
 from sklearn.model_selection import train_test_split
 
-
-class Net(torch.nn.Module):
-    def __init__(self, num_node_features):
-        super(Net, self).__init__()
-        self.conv1 = GCNConv(num_node_features, 64)
-        self.conv2 = GCNConv(64, 32)
-        self.classifier = torch.nn.Linear(32, 2)
-
-    def forward(self, data):
-        x, edge_index = data.x, data.edge_index
-
-        x = self.conv1(x, edge_index)
-        x = F.relu(x)
-        x = F.dropout(x, training=self.training)
-
-        x = self.conv2(x, edge_index)
-        x = F.relu(x)
-        x = F.dropout(x, training=self.training)
-
-        x = torch.mean(x, dim=0)  # Mean pooling
-        x = self.classifier(x)
-
-        return F.log_softmax(x, dim=-1)
+from src.utils.plot_fig import plot_accuracies, plot_losses
 
 
-# Assuming data_list is a list of PyTorch Geometric data objects, and labels is a list of your labels
+class ClassificationBase(nn.Module):
+    def training_step(self, batch):
+        graphs, labels = zip(*batch)
+        out = self(graphs)  # Generate predictions
+        loss = nn.BCELoss(out, labels)  # Calculate loss
+        return loss
+
+    def validation_step(self, batch):
+        graphs, labels = zip(*batch)
+        out = self(graphs)  # Generate predictions
+        loss = nn.BCELoss(out, labels)  # Calculate loss
+        acc = accuracy(out, labels)  # Calculate accuracy
+        return {"val_loss": loss.detach(), "val_acc": acc}
+
+    def validation_epoch_end(self, outputs):
+        batch_losses = [x["val_loss"] for x in outputs]
+        epoch_loss = torch.stack(batch_losses).mean()  # Combine losses
+        batch_accs = [x["val_acc"] for x in outputs]
+        epoch_acc = torch.stack(batch_accs).mean()  # Combine accuracies
+        return {"val_loss": epoch_loss.item(), "val_acc": epoch_acc.item()}
+
+    def epoch_end(self, epoch, result):
+        print(
+            "Epoch [{}], train_loss: {:.4f}, val_loss: {:.4f}, val_acc: {:.4f}".format(
+                epoch, result["train_loss"], result["val_loss"], result["val_acc"]
+            )
+        )
 
 
-def classifyCNN(data, labels):
-    # Split data into train and test
-    data_train, data_test, y_train, y_test = train_test_split(
-        data, labels, test_size=0.2, random_state=42
-    )
+class ClassificationCNN(ClassificationBase):
+    def __init__(self):
+        super().__init__()
+        self.conv11 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
+        self.conv12 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.pool1 = nn.MaxPool2d(2, 2)
 
-    # Convert lists to DataLoader
-    loader_train = DataLoader(data_train, batch_size=32, shuffle=True)
-    loader_test = DataLoader(data_test, batch_size=32)
+        self.conv21 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
+        self.conv22 = nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1)
+        self.pool2 = nn.MaxPool2d(2, 2)
 
-    # Initialize the network and optimizer
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = Net(num_node_features=data[0].num_node_features).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+        self.conv31 = nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1)
+        self.conv32 = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1)
+        self.pool3 = nn.MaxPool2d(2, 2)
 
-    # Train the network
-    model.train()
-    for _ in range(100):  # 100 epochs
-        for batch in loader_train:
-            batch = batch.to(device)
-            optimizer.zero_grad()
-            out = model(batch)
-            loss = F.nll_loss(out, batch.y)
+        self.fc1 = nn.Linear(256 * 11 * 11, 1024)
+        self.fc2 = nn.Linear(1024, 512)
+        self.fc3 = nn.Linear(512, 1)
+
+    def forward(self, x):
+        x = x.unsqueeze(1)
+        x = self.pool1(F.relu(self.conv12(F.relu(self.conv11(x)))))
+        x = self.pool2(F.relu(self.conv22(F.relu(self.conv21(x)))))
+        x = self.pool3(F.relu(self.conv32(F.relu(self.conv31(x)))))
+
+        x = x.view(x.shape[0], -1)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = torch.sigmoid(self.fc3(x))
+        return x
+
+
+def accuracy(outputs, labels):
+    _, preds = torch.max(outputs, dim=1)
+    return torch.tensor(torch.sum(preds == labels).item() / len(preds))
+
+
+@torch.no_grad()
+def evaluate(model, val_loader):
+    model.eval()
+    outputs = [model.validation_step(batch) for batch in val_loader]
+    return model.validation_epoch_end(outputs)
+
+
+def fit(epochs, lr, bsize, model, train_data, val_data):
+    opt_func = torch.optim.Adam(model.parameters(), lr=lr)
+    history = []
+    optimizer = opt_func(model.parameters(), lr)
+    for epoch in range(epochs):
+        # Training Phase
+        train_losses = []
+        i = 0
+        while i < len(train_data):
+            loss = model.training_step(train_data[i : min(i + bsize, len(train_data))])
+            train_losses.append(loss)
             loss.backward()
             optimizer.step()
+            optimizer.zero_grad()
+            i += bsize
+        # Validation phase
+        result = evaluate(model, val_data)
+        result["train_loss"] = torch.stack(train_losses).mean().item()
+        model.epoch_end(epoch, result)
+        history.append(result)
 
-    # Test the network
+    plot_accuracies(history)
+    plot_losses(history)
+
+
+def predict(model, test_data):
     model.eval()
-    predictions, y_true = [], []
-    for batch in loader_test:
-        batch = batch.to(device)
-        with torch.no_grad():
-            pred = model(batch).max(dim=1)[1]
-        predictions.extend(pred.cpu().numpy())
-        y_true.extend(batch.y.cpu().numpy())
+    with torch.no_grad():
+        graphs, _ = zip(*test_data)
+        out = model(graphs)
+        preds = (out > 0.5).float()
+    return preds.tolist()
 
-    return y_true, predictions
+
+def classifyCNN(data):
+    model = ClassificationCNN()
+    model.load_state_dict(torch.load("../../models/classificationCNN.pth"))
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        data["graphs"], data["labels"], test_size=0.2, random_state=42
+    )
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_train, y_train, test_size=0.2, random_state=42
+    )
+
+    fit(10, 0.001, 3, model, list(zip(X_train, y_train)), list(zip(X_val, y_val)))
+
+    preds = predict(model, list(zip(X_test, y_test)))
+
+    return y_test, preds

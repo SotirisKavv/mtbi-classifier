@@ -101,6 +101,37 @@ def run():
     plt.show()
 
 
+def test_filt_parallel():
+    pool = multiprocessing.Pool()
+    meg = timer(import_data, "data/mTBI/sources_TBI_MEGM001.mat")
+
+    print("Starting filtering...")
+    filtered_signals = timer(filter, pool, meg, SAMPLE_RATE, BANDS)
+    print("Filtering succeeded!")
+
+    for method in METHODS:
+        #   create functional connectivity maps using festimator
+        print("Creating functional connectivity maps using {}...".format(method[0]))
+        fc_maps = timer(create_fcmap, pool, method[1], filtered_signals)
+        print("Functional connectivity maps created successfully!")
+
+        #   calculate interlayer weights maps using festimator
+        print("Calculating interlayer weights using {}...".format(method[0]))
+        triu_fc = create_interlayer_fcmaps(pool, method[1], filtered_signals)
+        print("Interlayer weights calculated successfully!")
+
+        #   1st topology: Single Layer FC
+        single_layer_architecture(fc_maps, method[0])
+
+        #   2nd topology: Multiplex FC
+        multiplex_architecture(fc_maps, triu_fc, method[0])
+
+        #   3rd topology: Multilayer FC
+        multilayer_architecture(fc_maps, triu_fc, method[0])
+
+    plt.show()
+
+
 def single_layer_architecture(fc_maps, method_name):
     print("Aggregating layers...")
     aggr_iplv = timer(np.mean, fc_maps, axis=0)
@@ -174,37 +205,6 @@ def multilayer_architecture(fc_maps, interlayer_w, method_name):
     )
 
     print("Multiplex created successfully!")
-
-
-def test_filt_parallel():
-    pool = multiprocessing.Pool()
-    meg = timer(import_data, "data/mTBI/sources_TBI_MEGM001.mat")
-
-    print("Starting filtering...")
-    filtered_signals = timer(filter, pool, meg, SAMPLE_RATE, BANDS)
-    print("Filtering succeeded!")
-
-    for method in METHODS:
-        #   create functional connectivity maps using festimator
-        print("Creating functional connectivity maps using {}...".format(method[0]))
-        fc_maps = timer(create_fcmap, pool, method[1], filtered_signals)
-        print("Functional connectivity maps created successfully!")
-
-        #   calculate interlayer weights maps using festimator
-        print("Calculating interlayer weights using {}...".format(method[0]))
-        triu_fc = create_interlayer_fcmaps(pool, method[1], filtered_signals)
-        print("Interlayer weights calculated successfully!")
-
-        #   1st topology: Single Layer FC
-        single_layer_architecture(fc_maps, method[0])
-
-        #   2nd topology: Multiplex FC
-        multiplex_architecture(fc_maps, triu_fc, method[0])
-
-        #   3rd topology: Multilayer FC
-        multilayer_architecture(fc_maps, triu_fc, method[0])
-
-    plt.show()
 
 
 def filter(pool, meg, sr, bands):
