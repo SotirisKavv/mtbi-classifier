@@ -10,8 +10,9 @@ def orthogonal_minimum_spanning_tree(graph, k):
     k: mst rounds
     """
 
+    eps = 1e-6
     original = graph.copy()
-    graph = 1 - graph
+    graph = 1 + eps - graph
 
     while k > 0:
         cur_mst = calculate_mst(graph)

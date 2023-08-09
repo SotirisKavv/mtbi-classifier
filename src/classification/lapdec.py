@@ -8,14 +8,14 @@ from sklearn.model_selection import train_test_split
 
 def classifyLD(data, labels):
     # Convert your graphs to the format required by NetworkX if needed
-
+    gk_graphs = [nx.Graph(g) for g in data]
     # Determine the number of nodes
-    n_nodes = data[0].number_of_nodes()
+    n_nodes = gk_graphs[0].number_of_nodes()
 
     # Prepare for Laplacian decomposition
     graph_embeddings = []
 
-    for graph in data:
+    for graph in gk_graphs:
         # Calculate the Laplacian matrix
         L = nx.normalized_laplacian_matrix(graph).todense()
 

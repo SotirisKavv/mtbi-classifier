@@ -2,7 +2,7 @@ import numpy as np
 from scipy.fftpack import hilbert
 
 
-def amplitude_envelope_correlation(timeseries1, timeseries2, chunk_size=1000):
+def amplitude_envelope_correlation(timeseries1, timeseries2):
     """
     Calculate the amplitude envelope correlation between X time series
     INPUT: timeseries - a NumPy array of shape (X, t) where X represents the number of time series and t is the number of time points
@@ -16,7 +16,6 @@ def amplitude_envelope_correlation(timeseries1, timeseries2, chunk_size=1000):
         )
 
     _, X1 = timeseries1.shape
-    _, X2 = timeseries2.shape
 
     im1 = np.apply_along_axis(hilbert, 0, timeseries1)
     im2 = np.apply_along_axis(hilbert, 0, timeseries2)
