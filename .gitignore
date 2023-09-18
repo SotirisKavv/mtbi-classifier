@@ -4,7 +4,7 @@ graphs
 models
 screenshots
 
-src/classification/__pycache__
-src/featextr/__pycache__
-src/festimators/__pycache__
-src/utils/__pycache__
+mtbi_classifier/classification/__pycache__
+mtbi_classifier/featextr/__pycache__
+mtbi_classifier/festimators/__pycache__
+mtbi_classifier/utils/__pycache__
