@@ -3,7 +3,7 @@ from scipy.signal import hilbert
 
 
 # implement imaginary phaselocking value (iPLV) for static functional brain networks
-def imag_phase_lock_value(multi1, multi2):
+def imag_phase_lock_value(multi1, multi2, multiplex=False):
     """
     A fast implementation of PLV for static functional brain networks
     INPUT : multi1, multi2 = filtered multichannel recordings with dimensions

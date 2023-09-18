@@ -1,76 +1,129 @@
+import numpy as np
 import torch
+import torch.nn as nn
+from scipy import stats
 from torch.nn import functional as F
-from torch_geometric.nn import GCNConv
+from torch_geometric.nn import GCNConv, global_max_pool, BatchNorm
 from torch_geometric.data import Data, DataLoader
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, roc_auc_score
 
 
-class Net(torch.nn.Module):
-    def __init__(self, num_node_features):
-        super(Net, self).__init__()
-        self.conv1 = GCNConv(num_node_features, 64)
-        self.conv2 = GCNConv(64, 32)
-        self.classifier = torch.nn.Linear(32, 2)
+class DropEdge(nn.Module):
+    def __init__(self, drop_prob):
+        super(DropEdge, self).__init__()
+        self.drop_prob = drop_prob
 
-    def forward(self, data):
-        x, edge_index = data.x, data.edge_index
-
-        x = self.conv1(x, edge_index)
-        x = F.relu(x)
-        x = F.dropout(x, training=self.training)
-
-        x = self.conv2(x, edge_index)
-        x = F.relu(x)
-        x = F.dropout(x, training=self.training)
-
-        x = torch.mean(x, dim=0)  # Mean pooling
-        x = self.classifier(x)
-
-        return F.log_softmax(x, dim=-1)
+    def forward(self, edge_index):
+        mask = torch.rand(edge_index.size(1)) > self.drop_prob
+        edge_index = edge_index[:, mask]
+        return edge_index
 
 
-# Assuming data_list is a list of PyTorch Geometric data objects, and labels is a list of your labels
+class GCN(nn.Module):
+    def __init__(self, in_channels, hidden_channels, out_channels, dropout_rate=0.5):
+        super(GCN, self).__init__()
+        self.conv1 = GCNConv(in_channels, hidden_channels)
+        self.conv2 = GCNConv(hidden_channels, hidden_channels)
+        self.batch_norm1 = BatchNorm(in_channels)
+        self.batch_norm2 = BatchNorm(hidden_channels)
+        self.batch_norm3 = BatchNorm(hidden_channels)
+        self.fc1 = nn.Linear(hidden_channels, hidden_channels)
+        self.fc2 = nn.Linear(hidden_channels, out_channels)
+        self.drop_edge = DropEdge(drop_prob=0.2)
+        self.dropout = nn.Dropout(dropout_rate)
 
-# Split data into train and test
-data_train, data_test, y_train, y_test = train_test_split(
-    data_list, labels, test_size=0.2, random_state=42
+    def forward(self, x, edge_index):
+        x = self.batch_norm1(x)
+        edge_index = self.drop_edge(edge_index)
+        x = F.relu(self.conv1(x, edge_index))
+        x = self.batch_norm2(x)
+        x = F.relu(self.conv2(x, edge_index))
+        x = self.batch_norm3(x)
+        x = global_max_pool(x, torch.zeros(x.size(0), dtype=torch.long))
+        x = self.dropout(x)
+        x = F.relu(self.fc1(x))
+        x = self.dropout(x)
+        x = self.fc2(x)
+        return torch.sigmoid(x)
+
+
+class StackingEnsemble(nn.Module):
+    def __init__(
+        self, in_channels, hidden_channels, out_channels, num_nodes, dropout_rate=0.5
+    ):
+        super(StackingEnsemble, self).__init__()
+        self.gcns = nn.ModuleList(
+            [
+                GCN(in_channels, hidden_channels, out_channels, num_nodes, dropout_rate)
+                for _ in range(5)
+            ]
+        )
+        self.random_forest = RandomForestClassifier()
+        self.bayes_optimal = GaussianNB()
+        self.meta_model = LinearRegression()
+
+    def forward(self, inputs, target_labels=None):
+        outputs = [gcn(A, X) for gcn, (A, X) in zip(self.gcns, inputs)]
+        outputs = torch.cat(outputs, dim=1).detach().numpy()
+
+        # Training and predictions for base models
+        if self.training:
+            self.random_forest.fit(outputs, target_labels)
+            self.bayes_optimal.fit(outputs, target_labels)
+
+        rf_predictions = self.random_forest.predict(outputs)
+        mv_predictions = stats.mode(outputs, axis=1)[0]
+        bo_predictions = self.bayes_optimal.predict(outputs)
+
+        # Combining predictions for meta-model
+        combined_predictions = np.vstack(
+            (rf_predictions, mv_predictions, bo_predictions)
+        ).T
+        if self.training:
+            self.meta_model.fit(combined_predictions, target_labels)
+
+        final_output = self.meta_model.predict(combined_predictions)
+
+        return torch.tensor(final_output, dtype=torch.float32)
+
+
+# Example usage Simple GCN:
+# Define the node features matrix and edge index as PyTorch tensors
+num_nodes = 3
+num_features_per_node = 2
+X = torch.rand((num_nodes, num_features_per_node))  # Node feature matrix (NxD)
+edge_index = torch.tensor(
+    [[0, 1, 2, 0, 2], [1, 0, 0, 2, 1]], dtype=torch.long
+)  # Edge index
+
+# Initialize the GCN model
+gcn_model = GCN(in_channels=num_features_per_node, hidden_channels=2, out_channels=1)
+
+# Perform a forward pass through the GCN model
+output = gcn_model(X, edge_index)
+print(output)
+
+
+# Example usage Ensemble GCN:
+num_nodes = 3
+num_features_per_node = 2
+inputs = [
+    (torch.rand((num_nodes, num_nodes)), torch.rand((num_nodes, num_features_per_node)))
+    for _ in range(5)
+]
+
+# Initialize the Ensemble GCN model
+ensemble_gcn_model = StackingEnsemble(
+    in_channels=num_features_per_node,
+    hidden_channels=2,
+    out_channels=1,
+    num_nodes=num_nodes,
 )
 
-# Convert lists to DataLoader
-loader_train = DataLoader(data_train, batch_size=32, shuffle=True)
-loader_test = DataLoader(data_test, batch_size=32)
-
-# Initialize the network and optimizer
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = Net(num_node_features=data_list[0].num_node_features).to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-
-# Train the network
-model.train()
-for epoch in range(100):  # 100 epochs
-    for batch in loader_train:
-        batch = batch.to(device)
-        optimizer.zero_grad()
-        out = model(batch)
-        loss = F.nll_loss(out, batch.y)
-        loss.backward()
-        optimizer.step()
-
-# Test the network
-model.eval()
-predictions, y_true = [], []
-for batch in loader_test:
-    batch = batch.to(device)
-    with torch.no_grad():
-        pred = model(batch).max(dim=1)[1]
-    predictions.extend(pred.cpu().numpy())
-    y_true.extend(batch.y.cpu().numpy())
-
-# Calculate accuracy
-accuracy = accuracy_score(y_true, predictions)
-print(f"Accuracy: {accuracy}")
-
-# Calculate AUC-ROC
-auc_roc = roc_auc_score(y_true, predictions)
-print(f"AUC-ROC: {auc_roc}")
+# Perform a forward pass through the Ensemble GCN model
+output = ensemble_gcn_model(inputs)
+print(output)

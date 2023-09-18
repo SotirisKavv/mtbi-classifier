@@ -4,17 +4,11 @@ from sklearn.metrics import (
     confusion_matrix,
     classification_report,
 )
-from classification.wlkernel import classifyWL
-from classification.lapdec import classifyLD
 from classification.cnn import classifyCNN
 
 
 def classify(graphs, labels, method):
-    if method == "WLKernel":
-        y_test, predictions = classifyWL(graphs, labels)
-    elif method == "LDecomp":
-        y_test, predictions = classifyLD(graphs, labels)
-    elif method == "CNN":
+    if method == "CNN":
         y_test, predictions = classifyCNN(graphs, labels)
 
     print_results(y_test, predictions)

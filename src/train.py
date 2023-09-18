@@ -1,104 +1,144 @@
 #  Main file for training the model
 #  import py libraries
+import os
 import numpy as np
 import pandas as pd
 import multiprocessing
+
+# from numba import jit, cuda
 from scipy import io as sio
 import matplotlib.pyplot as plt
+import networkx as nx
 
 #  import Utils
 from utils.timer import timer
 from utils.constants import *
 from utils.filter import bandpass
-from utils.plot_fig import plot_fig
+from classification.index import classify
+from utils.plot_fig import plot_fig, plot_circular_chord, show_brain_connectivity
+from utils.node_coordinates import get_coordinates
 from utils.mstk import orthogonal_minimum_spanning_tree as omst
-from utils.multiplex import multiplex_supra_adjacency_matrix as mpsam
-from utils.multiplex import multilayer_supra_adjacency_matrix as mlsam
-from utils.multiplex import cross_frequency_coupling as cfc
+from utils.multiplex import (
+    multiplex_supra_adjacency_matrix as mpsam,
+    multilayer_supra_adjacency_matrix as mlsam,
+    cross_frequency_coupling as cfc,
+)
 
 
-def run():
-    meg = import_data("data/mTBI/sources_TBI_MEGM001.mat")
-
-    rois = len(meg.columns)
-
-    aggr_iplv = np.zeros((rois, rois))
-    aggr_mi = np.zeros((rois, rois))
-    aggr_aec = np.zeros((rois, rois))
-
-    for band in BANDS:
-        print("==== band {} - {} ====".format(band[0], band[1]))
-        filt_meg = bandpass(
-            meg.to_numpy(),
-            SAMPLE_RATE,
-            band,
-            band[2],
-        )
-
-        fmap_iplv = iplv(filt_meg.T)
-        fmap_mi = mi(filt_meg)
-        fmap_aec = aec(filt_meg)
-
-        aggr_iplv += fmap_iplv
-        aggr_mi += fmap_mi
-        aggr_aec += fmap_aec
-
-    # Single Layer FC
-    aggr_iplv /= len(BANDS)
-    aggr_mi /= len(BANDS)
-    aggr_aec /= len(BANDS)
-
-    plt.figure(figsize=(12, 4))
-    plt.suptitle("Aggregated results")
-
-    plt.subplot(131)
-    sns.heatmap(aggr_iplv, cmap="viridis")
-    plt.title("IPLV")
-    plt.xlabel("ROIs")
-    plt.ylabel("ROIs")
-
-    plt.subplot(132)
-    sns.heatmap(aggr_mi, cmap="viridis")
-    plt.title("MI")
-    plt.xlabel("ROIs")
-    plt.ylabel("ROIs")
-    plt.tight_layout()
-
-    plt.subplot(133)
-    sns.heatmap(aggr_aec, cmap="viridis")
-    plt.title("AEC")
-    plt.xlabel("ROIs")
-    plt.ylabel("ROIs")
-    plt.tight_layout()
-
-    mst_iplv = omst(aggr_iplv, 15)
-    mst_mi = omst(aggr_mi, 15)
-    mst_aec = omst(aggr_aec, 15)
-
-    plt.figure(figsize=(12, 4))
-    plt.suptitle("3-MST results")
-
-    plt.subplot(131)
-    sns.heatmap(mst_iplv, cmap="viridis")
-    plt.title("IPLV")
-    plt.xlabel("ROIs")
-    plt.ylabel("ROIs")
-
-    plt.subplot(132)
-    sns.heatmap(mst_mi, cmap="viridis")
-    plt.title("MI")
-    plt.xlabel("ROIs")
-    plt.ylabel("ROIs")
-    plt.tight_layout()
-
-    plt.subplot(133)
-    sns.heatmap(mst_aec, cmap="viridis")
-    plt.title("AEC")
-    plt.xlabel("ROIs")
-    plt.ylabel("ROIs")
-    plt.tight_layout()
-
+def test_classification():
+    graphs = []
+    labels = []
+    for root, _, file in os.walk("data"):
+        for f in file:
+            print("Processing file {}".format(f))
+            label = 1 if "TBI" in f else 0
+            meg = import_panda_csv(os.path.join(root, f))
+            g = test_pipline(meg)
+            graphs.append(g)
+            labels.append(label)
+            print("=========================================")
+            print("\r", end="")
+    print("Graphs loaded successfully!")
+    print("Starting classification...")
+    classify(graphs, labels, "CNN")
     plt.show()
+
+
+def create_graphs():
+    for root, _, file in os.walk("data"):
+        for f in file:
+            print("Processing file {}".format(f))
+            label = 1 if "TBI" in f else 0
+            meg = import_panda_csv(os.path.join(root, f))
+            g = test_pipline(meg)
+            pd.DataFrame(g).to_csv(
+                "data/single/IPLV/{}{}_graph.csv".format(
+                    "TBI" if label == 1 else "HC", f.split(".")[0][-2:]
+                )
+            )
+            print("=========================================")
+
+
+# @jit(target_backend="cuda")
+def test_pipline(meg):
+    pool = multiprocessing.Pool()
+
+    print("Starting filtering...", end="\r")
+    filtered_signals = filter(meg, SAMPLE_RATE, BANDS)
+    print(end="\x1b[2K")
+
+    # #   create functional connectivity maps using festimator
+    # print("Creating functional connectivity maps using IPLV...", end="\r")
+    # fc_maps = create_fcmap(pool, iplv, filtered_signals)
+    # print(end="\x1b[2K")
+
+    # #   calculate interlayer weights maps using festimator
+    # print("Calculating interlayer weights using {}...".format("IPLV"), end="\r")
+    # triu_fc = create_interlayer_fcmaps(pool, iplv, filtered_signals)
+    # print(end="\x1b[2K")
+
+    # #   3rd topology: Full MultiLayer FC - Full Multilayer network
+    # print("\rApplying Full Multilayer...", end="\r")
+    # graph = multilayer_architecture(fc_maps, triu_fc, "IPLV")
+    # print(end="\x1b[2K")
+
+    # #   create functional connectivity maps using festimator
+    # print("Creating functional connectivity maps using MI...", end="\r")
+    # fc_maps = create_fcmap(pool, mi, filtered_signals)
+    # print(end="\x1b[2K")
+
+    # #   calculate interlayer weights maps using festimator
+    # print("Calculating interlayer weights using {}...".format("MI"), end="\r")
+    # triu_fc = create_interlayer_fcmaps(pool, iplv, filtered_signals)
+    # print(end="\x1b[2K")
+
+    # #   3rd topology: Full MultiLayer FC - Full Multilayer network
+    # print("\rApplying Full Multilayer...", end="\r")
+    # graph = multilayer_architecture(fc_maps, triu_fc, "MI")
+    # print(end="\x1b[2K")
+
+    # #   create functional connectivity maps using festimator
+    # print("Creating functional connectivity maps using AEC...", end="\r")
+    # fc_maps = create_fcmap(pool, aec, filtered_signals)
+    # print(end="\x1b[2K")
+
+    # #   calculate interlayer weights maps using festimator
+    # print("Calculating interlayer weights using {}...".format("AEC"), end="\r")
+    # triu_fc = create_interlayer_fcmaps(pool, iplv, filtered_signals)
+    # print(end="\x1b[2K")
+
+    # #   3rd topology: Full MultiLayer FC - Full Multilayer network
+    # print("\rApplying Full Multilayer...", end="\r")
+    # graph = multilayer_architecture(fc_maps, triu_fc, "AEC")
+    # print(end="\x1b[2K")
+
+    #   1st topology: Single Layer FC - Aggregate FC Maps into one for each sample
+    #   create functional connectivity maps using festimator
+    print("Creating functional connectivity maps using MI...", end="\r")
+    fc_maps = create_fcmap(pool, mi, filtered_signals)
+    print(end="\x1b[2K")
+
+    print("\rApplying Single Layer FC...", end="\r")
+    graph = single_layer_architecture(fc_maps, "MI")
+    print(end="\x1b[2K")
+
+    # #   2nd topology: Multiplex FC - Usse the supradjaceny matrix to create a multiplex network
+    #   create functional connectivity maps using festimator
+    # print("Creating functional connectivity maps using AEC...", end="\r")
+    # fc_maps = create_fcmap(pool, aec, filtered_signals)
+    # print(end="\x1b[2K")
+
+    #    calculate interlayer weights maps using festimator
+    # print("Calculating interlayer weights using {}...".format("AEC"), end="\r")
+    # triu_fc = create_interlayer_fcmaps(pool, iplv, filtered_signals)
+    # print(end="\x1b[2K")
+
+    # print("\rApplying Multiplex...", end="\r")
+    # graph = multiplex_architecture(fc_maps, triu_fc, "AEC")
+    # print(end="\x1b[2K")
+
+    print("Graph created successfully!")
+    return graph
 
 
 def test_filt_parallel():
@@ -133,97 +173,117 @@ def test_filt_parallel():
 
 
 def single_layer_architecture(fc_maps, method_name):
-    print("Aggregating layers...")
-    aggr_iplv = timer(np.mean, fc_maps, axis=0)
-    plot_fig(
-        "heatmap",
-        (5, 4),
-        aggr_iplv,
-        "{} Aggregated results".format(method_name),
-        "ROIs",
-        "ROIs",
-    )
+    aggr_iplv = np.mean(fc_maps, axis=0)
+    # plot_fig(
+    #     "heatmap",
+    #     (5, 4),
+    #     aggr_iplv,
+    #     "{} Aggregated results".format(method_name),
+    #     "ROIs",
+    #     "ROIs",
+    # )
 
-    mst_iplv = timer(omst, aggr_iplv, OMST_LEVEL)
-    plot_fig(
-        "heatmap",
-        (5, 4),
-        mst_iplv,
-        "{} 15-MST results".format(method_name),
-        "ROIs",
-        "ROIs",
-    )
+    mst_iplv = omst(aggr_iplv, OMST_LEVEL)
+    # plot_fig(
+    #     "heatmap",
+    #     (5, 4),
+    #     mst_iplv,
+    #     "{} 15-MST results".format(method_name),
+    #     "ROIs",
+    #     "ROIs",
+    # )
+    return mst_iplv
 
 
 def multiplex_architecture(fc_maps, interlayer_w, method_name):
-    print("Creating multiplex...")
+    msam_iplv = mpsam(fc_maps, interlayer_w)
+    # plot_fig(
+    #     "heatmap",
+    #     (7, 6),
+    #     msam_iplv,
+    #     "{} Multiplex results".format(method_name),
+    #     "ROIs",
+    #     "ROIs",
+    # )
 
-    msam_iplv = timer(mpsam, fc_maps, interlayer_w)
-    plot_fig(
-        "heatmap",
-        (7, 6),
-        msam_iplv,
-        "{} Multiplex results".format(method_name),
-        "ROIs",
-        "ROIs",
-    )
-
-    mst_msam_iplv = timer(omst, msam_iplv, OMST_LEVEL * len(fc_maps))
-    plot_fig(
-        "heatmap",
-        (7, 6),
-        mst_msam_iplv,
-        "{} 15-MST results".format(method_name),
-        "ROIs",
-        "ROIs",
-    )
-
-    print("Multiplex created successfully!")
+    mst_msam_iplv = omst(msam_iplv, OMST_LEVEL * len(fc_maps))
+    # plot_fig(
+    #     "heatmap",
+    #     (7, 6),
+    #     mst_msam_iplv,
+    #     "{} 15-MST results".format(method_name),
+    #     "ROIs",
+    #     "ROIs",
+    # )
+    return mst_msam_iplv
 
 
 def multilayer_architecture(fc_maps, interlayer_w, method_name):
-    print("Creating multilayer network...")
-
     msam_iplv = timer(mlsam, fc_maps, interlayer_w)
-    plot_fig(
-        "heatmap",
-        (7, 6),
-        msam_iplv,
-        "{} Multilayer results".format(method_name),
-        "ROIs",
-        "ROIs",
-    )
+    # plot_fig(
+    #     "heatmap",
+    #     (7, 6),
+    #     msam_iplv,
+    #     "{} Multilayer results".format(method_name),
+    #     "ROIs",
+    #     "ROIs",
+    # )
 
     mst_msam_iplv = timer(omst, msam_iplv, OMST_LEVEL * len(fc_maps))
-    plot_fig(
-        "heatmap",
-        (7, 6),
-        mst_msam_iplv,
-        "{} 15-MST results".format(method_name),
-        "ROIs",
-        "ROIs",
-    )
+    # plot_fig(
+    #     "heatmap",
+    #     (7, 6),
+    #     mst_msam_iplv,
+    #     "{} 75-MST results".format(method_name),
+    #     "ROIs",
+    #     "ROIs",
+    # )
 
-    print("Multiplex created successfully!")
+    return mst_msam_iplv
 
 
-def filter(pool, meg, sr, bands):
-    filtered_async = [
-        pool.apply_async(
-            bandpass, args=(meg.to_numpy(), sr, (band[0], band[1]), band[2])
-        )
-        for band in bands
-    ]
-    return [r.get() for r in filtered_async]
+def filter(meg, sr, bands):
+    filtered = []
+    # titles = []
+    for band in bands:
+        filt_sig = bandpass(meg.to_numpy(), sr, (band[0], band[1]), band[2])
+        filtered.append(filt_sig)
+        # titles.append("{}-{}Hz".format(band[0], band[1]))
+    # plot_fig(
+    #     "ps_single",
+    #     (7, 6),
+    #     meg["Precentral_L"].values,
+    #     "Original Signal Spectrum",
+    #     "Frequency [Hz]",
+    #     "Magnitude",
+    # )
+    # plot_fig(
+    #     "ps_multiple",
+    #     (16, 8),
+    #     [filt_sig.T[0] for filt_sig in filtered],
+    #     title=titles,
+    #     xlabel="Frequency [Hz]",
+    #     ylabel="Magnitude",
+    #     suptitle="Filtered Signals Spectra",
+    # )
+    return filtered
 
 
 def create_fcmap(pool, method, signals):
+    # parallel fcmap creation
     fce_async = [pool.apply_async(method, args=(layer, layer)) for layer in signals]
     return [r.get() for r in fce_async]
 
+    # fcmaps = []
+    # for layer in signals:
+    #     fc = method(layer, layer)
+    #     fcmaps.append(fc)
+
+    # return fcmaps
+
 
 def create_interlayer_fcmaps(pool, method, signals):
-    matrices = timer(cfc, pool, method, signals)
+    matrices = cfc(pool, method, signals)
 
     # titles = []
     # for i in range(len(BAND_NAMES) - 1):
@@ -235,25 +295,36 @@ def create_interlayer_fcmaps(pool, method, signals):
     # )
     n = len(signals)
     triu = np.empty((n, n), dtype=object)
-    indices = np.triu_indices(
-        n, 1
-    )  # Get indices for upper triangle excluding the diagonal
+    # Get indices for upper triangle excluding the diagonal
+    indices = np.triu_indices(n, 1)
     for idx, val in zip(zip(*indices), matrices):
         triu[idx] = val
     return triu
 
 
-def import_data(path):
-    print("Loading data...")
-    data = sio.loadmat(path)
-    meg = pd.DataFrame(data["interp"].T)
-    meg.columns = [
-        label[0] for label in np.ndarray.flatten(data["virtualdata"]["label"][0][0])
-    ]
-    print("Data Loaded successfully.")
-    return meg
+def import_panda_csv(path):
+    mylist = []
+
+    for chunk in pd.read_csv(path, sep=";", lineterminator="\n", chunksize=5000):
+        mylist.append(chunk)
+
+    big_data = pd.concat(mylist, axis=0)
+    del mylist
+
+    return big_data
+
+
+def test_single():
+    meg = import_panda_csv("data\mTBI\sources_TBI_MEGM001.csv")
+    graph = test_pipline(meg)
+    plot_circular_chord(graph, meg.columns)
+    # coords = get_coordinates(meg.columns)
+    # show_brain_connectivity(graph, coords)
+    plt.show()
 
 
 if __name__ == "__main__":
     # run()
-    test_filt_parallel()
+    # test_filt_parallel()
+    # test_classification()
+    test_single()

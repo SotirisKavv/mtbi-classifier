@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.metrics import mutual_info_score
 
 
-def mutual_information(timeseries1, timeseries2):
+def mutual_information(timeseries1, timeseries2, multiplex=False):
     """
     Calculate the mutual information between X time series
     INPUT: timeseries1, timeseries2 - NumPy arrays of shape (X, t) where X represents the number of time series and t is the number of time points
@@ -18,7 +18,7 @@ def mutual_information(timeseries1, timeseries2):
     mi = np.zeros((X, X))
 
     for i in range(X):
-        for j in range(i + 1, X):
+        for j in range(i + 1 if not multiplex else i, X):
             mutual_info = compute_mutual_information(
                 timeseries1[:, i], timeseries2[:, j]
             )

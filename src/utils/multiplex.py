@@ -72,7 +72,7 @@ def cross_frequency_coupling(pool, method, layers):
     # Only the upper triangular part of the interlayer adjacency matrices is calculated as the matrices are symmetric
 
     results = [
-        pool.apply_async(method, args=(layers[i], layers[j]))
+        pool.apply_async(method, args=(layers[i], layers[j], True))
         for i in range(len(layers) - 1)
         for j in range(i + 1, len(layers))
     ]

@@ -1,6 +1,8 @@
 data
+graphs
 .vscode
 models
+screenshots
 
 src/classification/__pycache__
 src/featextr/__pycache__
