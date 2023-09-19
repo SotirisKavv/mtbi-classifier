@@ -5,6 +5,9 @@ models
 screenshots
 
 mtbi_classifier/classification/__pycache__
+mtbi_classifier/examples/__pycache__
 mtbi_classifier/featextr/__pycache__
+mtbi_classifier/filter/__pycache__
 mtbi_classifier/festimators/__pycache__
+mtbi_classifier/orthogonal_mst/__pycache__
 mtbi_classifier/utils/__pycache__

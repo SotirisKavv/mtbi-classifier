@@ -7,7 +7,7 @@ from matplotlib.path import Path
 from math import sqrt, ceil, floor
 from utils.constants import SAMPLE_RATE
 from matplotlib.patches import PathPatch
-from visbrain.objects import ConnectObj, SceneObj, SourceObj
+from visbrain.objects import ConnectObj, SourceObj
 from visbrain.gui import Brain
 
 sns.set_theme(style="whitegrid")
@@ -87,9 +87,39 @@ def plot_fig(kind, figsz, data, title=None, xlabel=None, ylabel=None, suptitle=N
         plt.tight_layout()
 
 
+def plot_roc_curve(fpr, tpr):
+    plt.figure(figsize=(8, 6))
+    plt.plot(fpr, tpr)
+    plt.ylabel("True Positive Rate")
+    plt.xlabel("False Positive Rate")
+    plt.title("ROC Curve")
+
+
+def plot_avg_roc_curve(mean_fpr, mean_tpr, std_tpr, auc_score):
+    plt.figure(figsize=(8, 6))
+    plt.plot(
+        mean_fpr, mean_tpr, color="b", label="Mean ROC curve (area = %0.2f)" % auc_score
+    )
+    plt.fill_between(
+        mean_fpr,
+        mean_tpr - std_tpr,
+        mean_tpr + std_tpr,
+        color="b",
+        alpha=0.2,
+        label="± std. dev.",
+    )
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title("Receiver Operating Characteristic")
+    plt.legend(loc="lower right")
+
+
 def plot_accuracies(history):
     """Plot the history of accuracies"""
     accuracies = [x["val_acc"] for x in history]
+    plt.figure()
     plt.plot(accuracies, "-x")
     plt.xlabel("epoch")
     plt.ylabel("accuracy")
@@ -100,6 +130,7 @@ def plot_losses(history):
     """Plot the losses in each epoch"""
     train_losses = [x.get("train_loss") for x in history]
     val_losses = [x["val_loss"] for x in history]
+    plt.figure()
     plt.plot(train_losses, "-bx")
     plt.plot(val_losses, "-rx")
     plt.xlabel("epoch")
@@ -126,6 +157,7 @@ def plot_circular_chord(matrix, labels=None):
     angle = 2 * np.pi / n
     angles = [i * angle for i in range(n)]
 
+    plt.figure()
     _, ax = plt.subplots(subplot_kw=dict(polar=True))
 
     # Plot nodes

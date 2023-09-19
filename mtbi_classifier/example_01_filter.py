@@ -1,11 +1,14 @@
 #   Example 01: Filtering
+# from import_dir import setup_package
+
+# setup_package()
 
 import matplotlib.pyplot as plt
 
 #  import Utils
 from utils.constants import SAMPLE_RATE, BANDS
 from utils.import_data import import_panda_csv
-from utils.filter import bandpass
+from filter.filter import bandpass
 from utils.plot_fig import plot_fig
 
 

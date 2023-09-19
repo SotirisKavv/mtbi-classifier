@@ -6,6 +6,7 @@ networkx
 scipy
 scikit-learn
 torch
+torch-geometric
 visbrain
 nilearn
 grakel
