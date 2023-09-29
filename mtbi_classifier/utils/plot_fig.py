@@ -118,11 +118,14 @@ def plot_avg_roc_curve(mean_fpr, mean_tpr, std_tpr, auc_score):
 
 def plot_accuracies(history):
     """Plot the history of accuracies"""
-    accuracies = [x["val_acc"] for x in history]
+    train_acc = [x.get("train_acc") for x in history]
+    val_acc = [x["val_acc"] for x in history]
     plt.figure()
-    plt.plot(accuracies, "-x")
+    plt.plot(train_acc, "-bx")
+    plt.plot(val_acc, "-rx")
     plt.xlabel("epoch")
     plt.ylabel("accuracy")
+    plt.legend(["Training", "Validation"])
     plt.title("Accuracy vs. No. of epochs")
 
 

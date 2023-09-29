@@ -2,18 +2,20 @@
 import os
 import multiprocessing
 
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 import pandas as pd
 
 #  import Utils
-from utils.constants import SAMPLE_RATE, BANDS, OMST_LEVEL, iplv
+from utils.constants import SAMPLE_RATE, BANDS, OMST_LEVEL, aec, mi, iplv
 from utils.import_data import import_all_data
 from featextr.feature_extraction import extract_features
 from filter.filter import bandpass
 from orthogonal_mst.omst import orthogonal_minimum_spanning_tree as omst
-from classification.svm import SVM
+from classification.knn import KNN
 
 
 sns.set_theme(style="whitegrid")
@@ -35,7 +37,8 @@ if __name__ == "__main__":
                     "-" * (20 - int(20 * (i / len(signals)))),
                     i + 1,
                     len(signals),
-                )
+                ),
+                end="\r",
             )
             #  filter data
 
@@ -49,7 +52,7 @@ if __name__ == "__main__":
             filtered = [r.get() for r in filt_async]
 
             fce_async = [
-                pool.apply_async(iplv, args=(layer, layer)) for layer in filtered
+                pool.apply_async(mi, args=(layer, layer)) for layer in filtered
             ]
             fc_maps = [r.get() for r in fce_async]
 
@@ -71,12 +74,20 @@ if __name__ == "__main__":
         graphs, labels = import_all_data("graphs")
         graphs = [graph.to_numpy() for graph in graphs]
 
-    dataset = extract_features(graphs, labels)
+    dataset = extract_features(graphs, labels, mode="BC")
 
     X = dataset.drop("label", axis=1)
     y = dataset["label"]
 
-    svm_classifier = SVM()
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
 
-    svm_classifier.cross_validate(X, y, 5)
+    # scaler = StandardScaler()
+    # X_train = scaler.fit_transform(X_train)
+    # X_test = scaler.transform(X_test)
+
+    knn = KNN()
+    knn.find_best_k(X, y, range(1, 31))
+    knn.train(X_train, y_train)
+    knn.cross_validate(X, y, 5)
+
     plt.show()

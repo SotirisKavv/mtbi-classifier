@@ -9,6 +9,5 @@ torch
 torch-geometric
 visbrain
 nilearn
-grakel
 torchvision
 torchaudio

@@ -1,7 +1,11 @@
 data
 graphs
+graphs_multiplex_aec
+graphs_aggregated_aec
+graphs_aggregated_mi
 .vscode
 models
+models_trained
 screenshots
 
 mtbi_classifier/classification/__pycache__
