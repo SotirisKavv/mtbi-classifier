@@ -11,3 +11,4 @@ visbrain
 nilearn
 torchvision
 torchaudio
+tabulate

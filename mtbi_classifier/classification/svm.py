@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.stats import ttest_1samp
 from sklearn.metrics import (
     accuracy_score,
     confusion_matrix,
@@ -11,7 +12,6 @@ from sklearn.svm import SVC
 from sklearn.model_selection import StratifiedKFold
 from utils.plot_fig import (
     plot_roc_curve,
-    plot_avg_roc_curve,
 )
 
 
@@ -54,7 +54,7 @@ class SVM:
         y (pd.Series): Label vector.
         cv (int): Number of folds in the cross-validation.
         """
-        kf = StratifiedKFold(n_splits=cv)
+        kf = StratifiedKFold(n_splits=cv, shuffle=True)
         scores = []
         tprs = []
         mean_fpr = np.linspace(0, 1, 100)
@@ -75,43 +75,64 @@ class SVM:
 
         # Print average accuracy
         scores = np.array(scores)
-        print(
-            f"Average Cross-Validation Score: {scores.mean()*100.0:.3f}% ± {scores.std()*100:.3f}"
-        )
 
-        # Plot ROC curve
+        acc_params = scores.mean(), scores.std()
+
         mean_tpr = np.mean(tprs, axis=0)
         std_tpr = np.std(tprs, axis=0)
-        plot_avg_roc_curve(mean_fpr, mean_tpr, std_tpr, auc(mean_fpr, mean_tpr))
+        auc_roc = auc(mean_fpr, mean_tpr)
 
-    def permutation_test(self, X_test, y_test):
+        roc_params = mean_fpr, mean_tpr, std_tpr, auc_roc
+
+        return acc_params, roc_params
+
+    def permutation_t_test(self, X_test, y_test, n_permutations=1000, alpha=0.05):
         """
-        Perform a permutation test to identify important features.
+        Perform a permutation t-test to identify important features.
 
         Parameters:
         X_test (pd.DataFrame): Test feature matrix.
         y_test (pd.Series): Test label vector.
-        features (list): List of feature names to test.
+        n_permutations (int): Number of permutations for each feature.
         """
         features = X_test.columns
 
-        # Calculate baseline metrics
         y_pred = self.predict(X_test)
         baseline_accuracy = accuracy_score(y_test, y_pred)
 
-        important_features = {}
+        t_statistics = {}
+        p_values = {}
 
         for feature in features:
-            X_permuted = X_test.copy()
-            X_permuted[feature] = np.random.permutation(X_test[feature])
+            # Permute the feature values and compute the t-statistic for each permutation
+            permuted_accuracies = []
+            for _ in range(n_permutations):
+                X_permuted = X_test.copy()
+                X_permuted[feature] = np.random.permutation(X_test[feature])
+                y_pred_permuted = self.predict(X_permuted)
+                permuted_accuracy = accuracy_score(y_test, y_pred_permuted)
+                permuted_accuracies.append(permuted_accuracy)
 
-            y_pred_permuted = self.predict(X_permuted)
-            permuted_accuracy = accuracy_score(y_test, y_pred_permuted)
+            # Compute the p-value
+            t_stat, p_value = ttest_1samp(permuted_accuracies, baseline_accuracy)
+            t_statistics[feature] = t_stat
+            p_values[feature] = p_value
 
-            if permuted_accuracy < baseline_accuracy:
-                important_features[feature] = {"Acc": permuted_accuracy}
+        important_features = [
+            feature for feature, p_value in p_values.items() if p_value < alpha
+        ]
 
-        # Print important features
-        print("Important features:")
-        for feature, metrics in important_features.items():
-            print(f"{feature}: {metrics}")
+        t_statistics = {
+            feature: t_stat
+            for feature, t_stat in t_statistics.items()
+            if feature in important_features
+        }
+        p_values = {
+            feature: p_value
+            for feature, p_value in p_values.items()
+            if feature in important_features
+        }
+        # Sort the features by their t-statistic
+        sorted_p = sorted(p_values.items(), key=lambda x: x[1], reverse=True)
+
+        return t_statistics, sorted_p

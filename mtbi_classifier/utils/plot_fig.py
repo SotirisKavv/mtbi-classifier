@@ -121,8 +121,8 @@ def plot_accuracies(history):
     train_acc = [x.get("train_acc") for x in history]
     val_acc = [x["val_acc"] for x in history]
     plt.figure()
-    plt.plot(train_acc, "-bx")
-    plt.plot(val_acc, "-rx")
+    plt.plot(train_acc, "-b")
+    plt.plot(val_acc, "-r")
     plt.xlabel("epoch")
     plt.ylabel("accuracy")
     plt.legend(["Training", "Validation"])
@@ -134,8 +134,8 @@ def plot_losses(history):
     train_losses = [x.get("train_loss") for x in history]
     val_losses = [x["val_loss"] for x in history]
     plt.figure()
-    plt.plot(train_losses, "-bx")
-    plt.plot(val_losses, "-rx")
+    plt.plot(train_losses, "-b")
+    plt.plot(val_losses, "-r")
     plt.xlabel("epoch")
     plt.ylabel("loss")
     plt.legend(["Training", "Validation"])
@@ -208,6 +208,108 @@ def plot_circular_chord(matrix, labels=None):
         if strength > 0.1:
             color = cmap(strength / max_strength)
             alpha = strength / max_strength
+
+            # Create a Bezier curve
+            verts = [
+                (angles[i], 1),
+                (angles[i], 1 - alpha / 2),
+                (angles[j], 1 - alpha / 2),
+                (angles[j], 1),
+            ]
+
+            codes = [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4]
+
+            path = Path(verts, codes)
+            patch = PathPatch(
+                path, facecolor="none", lw=2, edgecolor=color, alpha=alpha
+            )
+            ax.add_patch(patch)
+
+    ax.set_yticklabels([])
+    ax.set_xticklabels([])
+    ax.spines["polar"].set_visible(False)
+
+    # Add a colorbar
+    norm = plt.Normalize(0, max_strength)
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    plt.colorbar(sm, ax=ax, orientation="vertical", pad=0.12)
+
+
+def plot_circular_chord_multi(matrix, labels=None):
+    """
+    Plots a circular chord plot based on an adjacency matrix.
+
+    Parameters:
+    matrix (numpy.ndarray): The adjacency matrix representing the functional connectivity.
+    labels (list): A list of labels for the nodes. Default is None.
+
+    Returns:
+    None
+    """
+    colors = ["red", "blue", "green", "yellow", "orange"]
+
+    if labels is None:
+        labels = [str(i).replace("\r", "") for i in range(len(matrix))]
+
+    num_layers = len(colors)
+    num_nodes = len(matrix)
+    nodes_p_layer = num_nodes // num_layers
+
+    angle = 2 * np.pi / num_nodes
+    angles = [i * angle for i in range(num_nodes)]
+
+    plt.figure()
+    _, ax = plt.subplots(subplot_kw=dict(polar=True))
+
+    # Plot nodes
+    for idx, color in enumerate(colors):
+        s_index = idx * nodes_p_layer
+        e_index = (idx + 1) * nodes_p_layer
+        ax.scatter(angles[s_index:e_index], [1] * nodes_p_layer, c=color, s=100)
+
+    # Add labels
+    for i, label in enumerate(labels):
+        rotation = np.degrees(angles[i])
+        alignment = "left"
+        radial_distance = 1.1
+        if angles[i] > np.pi / 2 and angles[i] < 3 * np.pi / 2:
+            rotation += 180
+            alignment = "right"
+            radial_distance = 1.1
+        ax.text(
+            angles[i],
+            radial_distance,
+            label,
+            ha=alignment,
+            va="center",
+            rotation=rotation,
+            rotation_mode="anchor",
+            fontsize=9,
+        )
+
+    # Get the colormap
+    cmap = plt.cm.plasma
+
+    # Get the maximum connection strength to normalize the colors
+    max_strength = np.max(matrix)
+
+    # Create a list of connections with their strengths
+    connections = []
+    for i in range(num_nodes):
+        for j in range(i + 1, num_nodes):
+            if matrix[i][j] > 0:
+                connections.append((i, j, matrix[i][j]))
+
+    # Sort the connections in ascending order of strength
+    connections.sort(key=lambda x: x[2])
+
+    # Plot chords
+    for connection in connections:
+        i, j, strength = connection
+        if strength > 0.1:
+            color = cmap(strength / max_strength)
+            alpha = (1 - (strength / max_strength)) * 0.2
 
             # Create a Bezier curve
             verts = [

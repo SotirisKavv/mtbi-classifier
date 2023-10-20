@@ -10,9 +10,9 @@ def extract_features(graphs, labels, mode="BC"):
     cols = []
 
     if mode == "NS":
-        cols = ["NS{:0>2}".format(i) for i in range(len(graphs[0]))]
+        cols = ["NS{:0>3}".format(i) for i in range(len(graphs[0]))]
     elif mode == "BC":
-        cols = ["BC{:0>2}".format(i) for i in range(len(graphs[0]))]
+        cols = ["BC{:0>3}".format(i) for i in range(len(graphs[0]))]
     elif mode == "FE":
         cols = [
             "node_strengths_mean",
