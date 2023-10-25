@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from tabulate import tabulate
+from hyperopt import fmin, tpe, hp, STATUS_OK
 from torch import nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
@@ -235,70 +236,76 @@ class CNNClassifier:
         y_lab, preds = self.predict(test_loader)
         return y_lab, preds
 
-    def hyperparameter_tuning(
-        self,
-        data,
-        labels,
-        learning_rates,
-        batch_sizes,
-        weight_decays,
-        gammas,
-        verbose=False,
-        multilayer=False,
-    ):
-        accs = []
-        hparams = []
-        hparams_recs = {
-            "Learning Rate": [],
-            "Batch Size": [],
-            "Weight Decay": [],
-            "Gamma": [],
-            "Accuracy": [],
+    def hyperparameter_tuning(self, data, labels, multilayer=False, max_evals=25):
+        data = np.array(data)
+        labels = np.array(labels)
+
+        def objective(params):
+            skf = StratifiedKFold(n_splits=5)
+            val_accuracies = []
+
+            for train_idx, val_idx in skf.split(data, labels):
+                self.cnn = ClassificationCNN(multilayer)
+
+                params["batch_size"] = int(params["batch_size"])
+                self.lr = params["lr"]
+                self.bs = params["batch_size"]
+                self.wd = params["weight_decay"]
+                self.gamma = params["gamma"]
+
+                X_train, X_val = data[train_idx], data[val_idx]
+                y_train, y_val = labels[train_idx], labels[val_idx]
+
+                train_dataset = GraphDataset(X_train, y_train)
+                val_dataset = GraphDataset(X_val, y_val)
+                train_loader = DataLoader(
+                    train_dataset, batch_size=self.bs, shuffle=True
+                )
+                val_loader = DataLoader(val_dataset, batch_size=self.bs, shuffle=False)
+
+                criterion = nn.BCELoss()
+                optimizer = optim.Adam(
+                    self.cnn.parameters(), lr=self.lr, weight_decay=self.wd
+                )
+                history = self.train(
+                    criterion, optimizer, train_loader, val_loader, verbose=False
+                )
+                val_accuracies.append(history[-1]["val_acc"])
+
+            # Average validation accuracy across all folds
+            avg_val_acc = np.mean(val_accuracies)
+            return {"loss": -avg_val_acc, "status": STATUS_OK}
+
+        # Define the search space
+        space = {
+            "lr": hp.loguniform("lr", -10, -4),
+            "batch_size": hp.quniform("batch_size", 3, 6, 1),
+            "weight_decay": hp.loguniform("weight_decay", -10, -4),
+            "gamma": hp.uniform("gamma", 0.8, 1),
         }
 
-        for lr in learning_rates:
-            for bsize in batch_sizes:
-                for weight_decay in weight_decays:
-                    for gamma in gammas:
-                        self.lr = lr
-                        self.bs = bsize
-                        self.wd = weight_decay
-                        self.gamma = gamma
+        best = fmin(
+            fn=objective,
+            space=space,
+            algo=tpe.suggest,
+            max_evals=max_evals,
+            verbose=2,
+        )
 
-                        hparams_recs["Batch Size"].append(bsize)
-                        hparams_recs["Learning Rate"].append(lr)
-                        hparams_recs["Weight Decay"].append(weight_decay)
-                        hparams_recs["Gamma"].append(gamma)
+        best["batch_size"] = int(best["batch_size"])
 
-                        for _ in range(10):
-                            y_test, preds = self.classify(
-                                data,
-                                labels,
-                                verbose=verbose,
-                                multilayer=multilayer,
-                            )
-
-                            acc_mean = accuracy_score(y_test, preds)
-                        accs.append(acc_mean)
-                        hparams.append((lr, bsize, weight_decay, gamma))
-                        hparams_recs["Accuracy"].append(acc_mean)
-
-        optimal_hparams = hparams[accs.index(max(accs))]
-        best_lr, best_bsize, best_weight_decay, best_gamma = optimal_hparams
-
-        self.lr = best_lr
-        self.bs = best_bsize
-        self.wd = best_weight_decay
-        self.gamma = best_gamma
+        self.lr = best["lr"]
+        self.bs = best["batch_size"]
+        self.wd = best["weight_decay"]
+        self.gamma = best["gamma"]
 
         optimal_hyperparameters = {
-            "Learning Rate": [best_lr],
-            "Batch Size": [best_bsize],
-            "Weight Decay": [best_weight_decay],
-            "Gamma": [best_gamma],
+            "Learning Rate": [best["lr"]],
+            "Batch Size": [best["batch_size"]],
+            "Weight Decay": [best["weight_decay"]],
+            "Gamma": [best["gamma"]],
         }
 
-        print(tabulate(hparams_recs, headers="keys"))
         print(tabulate(optimal_hyperparameters, headers="keys", tablefmt="fancy_grid"))
 
     def cross_validate(self, dataset, labels, cv, multilayer=False, verbose=False):

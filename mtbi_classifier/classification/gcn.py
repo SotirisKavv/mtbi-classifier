@@ -4,12 +4,25 @@ import torch.nn as nn
 from scipy import stats
 from torch.nn import functional as F
 from torch_geometric.nn import GCNConv, global_max_pool, BatchNorm
-from torch_geometric.data import Data, DataLoader
+from torch_geometric.data import Data, DataLoader, Dataset
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, roc_auc_score
+
+
+class GraphDataset(Dataset):
+    def __init__(self, X, edge_index, y):
+        self.X = torch.tensor(X, dtype=torch.float32)  # Node features
+        self.edge_index = torch.tensor(edge_index, dtype=torch.long)  # Graph structure
+        self.y = torch.tensor(y, dtype=torch.float32)  # Labels
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        return self.X[idx], self.edge_index[idx], self.y[idx]
 
 
 class DropEdge(nn.Module):
@@ -24,17 +37,17 @@ class DropEdge(nn.Module):
 
 
 class GCN(nn.Module):
-    def __init__(self, in_channels, hidden_channels, out_channels, dropout_rate=0.5):
+    def __init__(self):
         super(GCN, self).__init__()
-        self.conv1 = GCNConv(in_channels, hidden_channels)
-        self.conv2 = GCNConv(hidden_channels, hidden_channels)
-        self.batch_norm1 = BatchNorm(in_channels)
-        self.batch_norm2 = BatchNorm(hidden_channels)
-        self.batch_norm3 = BatchNorm(hidden_channels)
-        self.fc1 = nn.Linear(hidden_channels, hidden_channels)
-        self.fc2 = nn.Linear(hidden_channels, out_channels)
+        self.conv1 = GCNConv(100, 1024)
+        self.conv2 = GCNConv(1024, 1024)
+        self.batch_norm1 = BatchNorm(100)
+        self.batch_norm2 = BatchNorm(1024)
+        self.batch_norm3 = BatchNorm(1024)
+        self.fc1 = nn.Linear(1024, 1024)
+        self.fc2 = nn.Linear(1024, 100)
         self.drop_edge = DropEdge(drop_prob=0.2)
-        self.dropout = nn.Dropout(dropout_rate)
+        self.dropout = nn.Dropout(0.9)
 
     def forward(self, x, edge_index):
         x = self.batch_norm1(x)
