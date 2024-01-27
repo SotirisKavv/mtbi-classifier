@@ -13,7 +13,7 @@ import pandas as pd
 #  import Utils
 from utils.constants import SAMPLE_RATE, BANDS, OMST_LEVEL, aec, mi, iplv
 from utils.import_data import import_all_data
-from featextr.feature_extraction import extract_features
+from featextr.feature_extraction import extract_features_from_graphs
 from filter.filter import bandpass
 from orthogonal_mst.omst import orthogonal_minimum_spanning_tree as omst
 from classification.svm import SVM
@@ -75,7 +75,7 @@ if __name__ == "__main__":
         graphs, labels = import_all_data("graphs")
         graphs = [graph.to_numpy() for graph in graphs]
 
-    dataset = extract_features(graphs, labels, mode="BC")
+    dataset = extract_features_from_graphs(graphs, labels, mode="BC")
 
     X = dataset.drop("label", axis=1)
     y = dataset["label"]
